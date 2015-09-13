@@ -18,20 +18,10 @@
   },
   "author": "",
   "license": "ISC",
-
   "jspm": {
     "directories": {},
     "dependencies": {
-      "lovefield": "npm:lovefield@^2.0.62",
-      "exports": "lf",
-      "main": "dist/lovefield.js"
-    },
-    "shim": {
-      "lovefield": {
-        "main": "dist/lovefield.js",
-        "lovefield": "lovefield",
-        "module": "cjs",
-        "exports": "lf"        
+      "lovefield": "npm:lovefield@^2.0.62"
     },
     "devDependencies": {
       "babel": "npm:babel-core@^5.8.22",
