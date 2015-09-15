@@ -3,16 +3,30 @@
 ///// <reference path="../typings/lovefield/lovefield.d.ts" />
 import 'lovefield/dist/lovefield';
 
-function sequence( ...items: any[][] ) {
-    var d = items.pop();
-    if (d){
-        var fn : (...args:any[]) => Promise<any> = d.splice(0,1)[0];
-        var args = d;        
-        fn.apply(this,args).then(()=>{ sequence(...items)})
-    }
-}
-    
+
 (function(){ 
+    
+    // execute functions returning promises sequentially
+    function sequence(...items: any[][]) {
+        items.reverse(); // reverse so that pops come off of the bottom instead of the top.    
+        
+        return new Promise((resolve,reject)=>{
+            _sequence(items, resolve, reject);                    
+        })
+        
+        function _sequence(items: any[][], resolve, reject ) {
+            var d = items.pop();            
+            if (d){
+                var fn : (...args:any[]) => Promise<any> = d.splice(0,1)[0];
+                var args = d;        
+                fn.apply(this,args).then(()=>{ _sequence(items, resolve,reject);})
+            }
+            else {
+                resolve();
+            }
+        }
+    }    
+    
     var schemaBuilder: lf.schema.Builder = lf.schema.create('todo', 1);
     
     schemaBuilder.createTable('Item')
@@ -30,23 +44,30 @@ function sequence( ...items: any[][] ) {
     var inserts:number = 50000;
     
     schemaBuilder.connect({storeType: lf.schema.DataStoreType.WEB_SQL}).then(websql =>{
-    schemaBuilder.connect({storeType: lf.schema.DataStoreType.INDEXED_DB}).then(indexeddb =>{
-        sequence(
-            [testSelectPredicate, indexeddb, 'IndexedDB'],
-            [testSelectPredicate, websql, 'WebSQL'],
-            [testSelect, indexeddb, 'IndexedDB'],
-            [testSelect, websql, 'WebSQL'],
-            [testInsert, indexeddb, 'IndexedDB'],
-            [testInsert, websql, 'WebSQL'],
-            [dropTable, indexeddb, 'IndexedDB'],
+        return sequence(
             [dropTable, websql, 'WebSQL'],
-            [testInsertBatch, indexeddb, 'IndexedDB'],
             [testInsertBatch, websql, 'WebSQL'],
-            [dropTable, indexeddb, 'IndexedDB'],
-            [dropTable, websql, 'WebSQL']    
-        );  
-    })});
-    
+            [dropTable, websql, 'WebSQL'],
+            [testInsert, websql, 'WebSQL'],                        
+            [testSelect, websql, 'WebSQL'],
+            [testSelectPredicate, websql, 'WebSQL']
+        );      
+    })
+    .then(()=>{
+        schemaBuilder.connect({storeType: lf.schema.DataStoreType.INDEXED_DB}).then(indexeddb =>{
+            return sequence(
+                [dropTable, indexeddb, 'IndexedDB'],
+                [testInsertBatch, indexeddb, 'IndexedDB'],
+                [dropTable, indexeddb, 'IndexedDB'],
+                [testInsert, indexeddb, 'IndexedDB'],
+                [testSelect, indexeddb, 'IndexedDB'],
+                [testSelectPredicate, indexeddb, 'IndexedDB']
+            );  
+        })        
+    })
+        
+        
+       
     function dropTable(db: lf.Database, storeType:string){ 
 
             var starttime:number = Date.now();                   
@@ -102,7 +123,7 @@ function sequence( ...items: any[][] ) {
         });
     }    
     
-    
+    /*
     function testSelectPredicate(db: lf.Database, storeType: string) {     
         
         var starttime:number = Date.now();        
@@ -112,14 +133,32 @@ function sequence( ...items: any[][] ) {
         var q = [];
         
         for (var i=0; i<inserts; i++) {            
-        var column: lf.schema.Column = (<any>dummyItem).id;
-        var select = db.select().from(dummyItem).where(column.eq(10000));            
-        q.push(select);
+            var column: lf.schema.Column = (<any>dummyItem).id;
+            var select = db.select().from(dummyItem).where(column.eq(10000));            
+            q.push(select);
         }
         return tx.exec(q).then((r)=>{
                 var duration = Date.now() - starttime;
                 console.log(`lovefield:${storeType} ${inserts} selects single row ${duration}ms`);         
-                if (r.length !== inserts) console.error('selected more rows than expected. Mabey a bug in db.delete()?'); 
+                if (r.length !== inserts) console.error('selected more rows than expected. Mabey a bug in db.delete()?');                
+        });
+    } 
+    */
+    
+    function testSelectPredicate(db: lf.Database, storeType: string) {     
+        
+        var starttime:number = Date.now();            
+        var dummyItem = db.getSchema().table('Item');                                          
+        var id: lf.schema.Column = (<any>dummyItem).id;
+        var done: lf.schema.Column = (<any>dummyItem).done;
+        var select = db.select().from(dummyItem).where(lf.op.and(id.gt(-1), done.eq(false)));            
+                    
+        return select.exec().then((rows)=>{
+            if (!rows.length || rows.length < inserts) console.error( `lovefield:${storeType} did not select the expected number of rows!`);
+            else {
+                var duration = Date.now() - starttime;
+                console.log(`lovefield:${storeType} 1 select ${inserts} rows with predicate ${duration}ms`);
+            }              
         });
     }  
 
