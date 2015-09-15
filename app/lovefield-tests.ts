@@ -27,25 +27,16 @@ import 'lovefield/dist/lovefield';
         }
     }    
     
-    var schemaBuilder: lf.schema.Builder = lf.schema.create('todo', 1);
-    
-    schemaBuilder.createTable('Item')
-    .addColumn('id', lf.Type.INTEGER)
-    .addColumn('description', lf.Type.STRING)
-    .addColumn('deadline', lf.Type.DATE_TIME)
-    .addColumn('done', lf.Type.BOOLEAN)    
-    /*.addPrimaryKey(['id'],true)  AHHH dont use autoinc key option!!! no wonder they removed this from the typedef. performance is soooo bad! */
-    .addIndex('idxDeadline', ['deadline'], false, lf.Order.DESC);
-    
+        
     
     var connectOptions: lf.schema.ConnectOptions;
     var todoDb: lf.Database = null;
     var dummyItem: lf.schema.Table = null;
     var inserts:number = 50000;
     
-    schemaBuilder.connect({storeType: lf.schema.DataStoreType.WEB_SQL}).then(websql =>{
+    createSchema('WebSQL').connect({storeType: lf.schema.DataStoreType.WEB_SQL}).then(websql =>{
         return sequence(
-            [dropTable, websql, 'WebSQL'],
+            [dropTable, websql, 'noReport'],
             [testInsertBatch, websql, 'WebSQL'],
             [dropTable, websql, 'WebSQL'],
             [testInsert, websql, 'WebSQL'],                        
@@ -54,9 +45,9 @@ import 'lovefield/dist/lovefield';
         );      
     })
     .then(()=>{
-        schemaBuilder.connect({storeType: lf.schema.DataStoreType.INDEXED_DB}).then(indexeddb =>{
+        createSchema('IndexedDB').connect({storeType: lf.schema.DataStoreType.INDEXED_DB}).then(indexeddb =>{
             return sequence(
-                [dropTable, indexeddb, 'IndexedDB'],
+                [dropTable, indexeddb, 'noReport'],
                 [testInsertBatch, indexeddb, 'IndexedDB'],
                 [dropTable, indexeddb, 'IndexedDB'],
                 [testInsert, indexeddb, 'IndexedDB'],
@@ -66,7 +57,21 @@ import 'lovefield/dist/lovefield';
         })        
     })
         
+    
+    function createSchema(suffix:string) {
+        var schemaBuilder: lf.schema.Builder = lf.schema.create(`todo_${suffix}`, 1);
         
+        schemaBuilder.createTable('Item')
+        .addColumn('id', lf.Type.INTEGER)
+        .addColumn('description', lf.Type.STRING)
+        .addColumn('deadline', lf.Type.DATE_TIME)
+        .addColumn('done', lf.Type.BOOLEAN)    
+        /*.addPrimaryKey(['id'],true)  AHHH dont use autoinc key option!!! no wonder they removed this from the typedef. performance is soooo bad! */
+        .addIndex('idxId', ['id'], true, lf.Order.DESC)
+        .addIndex('idxDone', ['done'], false, lf.Order.DESC);
+
+        return schemaBuilder;
+    }    
        
     function dropTable(db: lf.Database, storeType:string){ 
 
@@ -74,7 +79,8 @@ import 'lovefield/dist/lovefield';
             dummyItem = db.getSchema().table('Item');
             return db.delete().from(dummyItem).exec().then(()=>{
                 var duration = Date.now() - starttime;
-                console.log(`lovefield:${storeType} deleting ${inserts} rows ${duration}ms`);
+                if (storeType !== 'noReport')
+                    console.log(`lovefield:${storeType} deleting ${inserts} rows ${duration}ms`);
             })   
     }
     
